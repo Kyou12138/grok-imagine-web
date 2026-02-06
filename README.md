@@ -17,8 +17,6 @@ https://t.wu666.eu.org/file/1770371686274_IMG_0882.png
 https://t.wu666.eu.org/file/1770371686131_IMG_0884.png
 
 
-*(实际部署后可替换为真实截图)*
-
 ## 主要特性
 
 - **图像 & 视频生成**：支持 `grok-imagine-1.0`（图像）和 `grok-imagine-1.0-video`（视频）模型
@@ -44,7 +42,7 @@ https://t.wu666.eu.org/file/1770371686131_IMG_0884.png
 ## 如何使用
 
 1. **首次打开**：会自动弹出 **API 配置** 窗口  
-   - 填写 **API Base URL**（例如：`https://grok.wu666.eu.org/v1` 或你自己的反代地址）
+   - 填写 **API Base URL**（例如：`https://127.0.0.1/v1` 或你自己的反代地址）
    - 填写 **API Key**（以 `sk-` 开头的密钥）
    - （可选）修改历史记录 Key
    - 点击“保存并继续”
