@@ -31,11 +31,16 @@
   <style>
     * { box-sizing: border-box; }
     html, body {
-      height: 100%;
       margin: 0;
       padding: 0;
       background: linear-gradient(to bottom, #0A0E1A, #111827);
       overscroll-behavior: none;
+    }
+    body {
+      min-height: 100vh;
+      min-height: -webkit-fill-available;
+      display: flex;
+      flex-direction: column;
     }
     .glass { background: rgba(19, 28, 49, 0.7); backdrop-filter: blur(20px); border: 1px solid rgba(0, 229, 255, 0.2); }
     .card { transition: all 0.4s ease; position: relative; }
@@ -48,23 +53,28 @@
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
     .main-container {
+      flex: 1;
+      display: flex;
       flex-direction: column;
       overflow-y: auto;
-      height: 100vh;
+      -webkit-overflow-scrolling: touch;
       padding: 0.5rem;
       padding-top: 4.5rem;
-      padding-bottom: 4rem;
+      padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0));
     }
 
     .results-section {
       margin-top: 1rem;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
     }
 
     @media (orientation: landscape) {
       .main-container {
         padding: 0;
         padding-top: 4.5rem;
-        padding-bottom: 4rem;
+        padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0));
       }
       .input-panel {
         padding: 0.5rem;
@@ -132,6 +142,7 @@
       backdrop-filter: blur(12px);
       border-top: 1px solid rgba(0, 229, 255, 0.3);
       padding: 1rem;
+      padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0));
       display: flex;
       align-items: center;
       justify-content: center;
@@ -155,7 +166,7 @@
     }
   </style>
 </head>
-<body class="text-gray-100 h-screen flex flex-col overflow-hidden">
+<body class="text-gray-100 flex flex-col">
 
   <div id="configModal" class="config-modal hidden">
     <div class="glass rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl">
@@ -192,7 +203,7 @@
     </button>
   </div>
 
-  <div class="flex-1 main-container">
+  <div class="main-container">
     <div class="input-panel">
       <div class="glass rounded-3xl p-6 flex flex-col shadow-2xl">
         <div class="mb-5">
@@ -278,7 +289,7 @@
       </div>
     </div>
 
-    <div class="results-section flex-1 flex flex-col">
+    <div class="results-section">
       <div id="selectionBar" class="hidden">
         <div class="flex items-center justify-between">
           <span class="text-lg">已选中 <span id="selectedCount">0</span> 个</span>
@@ -1154,10 +1165,6 @@
       if (e.target === elements.configModal) hideConfigModal();
     });
 
-    const hideAddressBar = () => {
-      setTimeout(() => window.scrollTo(0, 1), 0);
-    };
-
     window.addEventListener('beforeunload', () => {
       BlobManager.revokeAll();
     });
@@ -1166,14 +1173,6 @@
       if (!Config.isValid(config)) {
         showConfigModal();
       }
-
-      hideAddressBar();
-      setTimeout(hideAddressBar, 500);
-      setTimeout(hideAddressBar, 1000);
-
-      window.addEventListener('orientationchange', hideAddressBar);
-      document.addEventListener('touchmove', hideAddressBar, { passive: true });
-      window.addEventListener('scroll', hideAddressBar);
 
       History.load();
       InputMolecule.init();
