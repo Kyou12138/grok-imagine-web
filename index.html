@@ -1149,7 +1149,7 @@
         const blob = new Blob([byteArray], { type: 'image/png' });
         formData.append('image', blob, 'reference.png');
 
-        const data = await Atoms.apiPostForm('/v1/images/edits', formData);
+        const data = await Atoms.apiPostForm('/images/edits', formData);
 
         if (!data.data || !Array.isArray(data.data)) {
           throw new Error('API 返回数据格式错误');
