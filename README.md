@@ -12,9 +12,9 @@
 
 一个美观、功能丰富、完全静态的 Grok Imagine 前端网页，支持图像生成、视频生成、参考图变体、历史记录持久化、多选批量下载等功能。专为移动端与桌面端优化，完美适配 iOS Safari。
 
-https://t.wu666.eu.org/file/1770371683240_IMG_0883.png
-https://t.wu666.eu.org/file/1770371686274_IMG_0882.png
-https://t.wu666.eu.org/file/1770371686131_IMG_0884.png
+<img src="https://t.wu666.eu.org/file/1770618678590_IMG_1037.jpeg" alt="IMG_1037.jpeg" width=100% />
+
+<img src="https://t.wu666.eu.org/file/1770618685346_IMG_1036.jpeg" alt="IMG_1036.jpeg" width=100% />
 
 
 ## 主要特性
