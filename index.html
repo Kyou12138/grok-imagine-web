@@ -152,6 +152,26 @@
       justify-content: center;
       z-index: 100;
     }
+
+    #previewGrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 0.75rem;
+      margin-top: 0.5rem;
+    }
+
+    .preview-item {
+      position: relative;
+      border-radius: 1rem;
+      overflow: hidden;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+
+    .preview-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
   </style>
 </head>
 <body class="text-gray-100 flex flex-col">
@@ -216,13 +236,14 @@
 
         <div class="flex flex-col lg:flex-row gap-6 mb-5">
           <div class="flex-1 min-w-0">
-            <label class="flex items-center text-base font-medium mb-2">
-              <i class="fas fa-image mr-2 text-primary"></i> 参考图像（可选，编辑模式必填）
+            <label id="referenceLabel" class="flex items-center text-base font-medium mb-2">
+              <i class="fas fa-image mr-2 text-primary"></i> 参考图像（可选）
             </label>
-            <input type="file" id="inputImage" accept="image/*" class="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:bg-primary file:text-black file:font-bold file:border-0">
+            <input type="file" id="inputImage" accept="image/*" multiple class="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:bg-primary file:text-black file:font-bold file:border-0">
             <div id="previewContainer" class="mt-4 relative" style="display:none;">
               <div class="bg-panel/70 rounded-3xl p-4 shadow-2xl overflow-hidden">
-                <img id="preview" class="block mx-auto max-w-full max-h-[40vh] h-auto rounded-2xl object-contain shadow-lg" alt="参考图像预览">
+                <div id="previewGrid"></div>
+                <div class="text-xs text-gray-400 mt-2 text-center">已上传 <span id="imageCount">0</span> 张</div>
               </div>
               <button id="clearImage" class="absolute top-6 right-6 bg-red-600 hover:bg-red-700 rounded-full p-3 text-white shadow-lg">
                 <i class="fas fa-times text-xl"></i>
@@ -321,8 +342,7 @@
     'use strict';
 
     const MAX_PROMPT_LENGTH = 1000;
-    const MAX_HISTORY_ITEMS = 50;
-    const MAX_STORAGE_SIZE = 4 * 1024 * 1024;
+    const MAX_STORAGE_SIZE = 20 * 1024 * 1024;
 
     const Config = {
       storageKey: 'grok_imagine_config',
@@ -378,9 +398,11 @@
       prompt: document.getElementById('prompt'),
       charCount: document.getElementById('charCount'),
       inputImage: document.getElementById('inputImage'),
-      preview: document.getElementById('preview'),
       previewContainer: document.getElementById('previewContainer'),
+      previewGrid: document.getElementById('previewGrid'),
+      imageCount: document.getElementById('imageCount'),
       clearImage: document.getElementById('clearImage'),
+      referenceLabel: document.getElementById('referenceLabel'),
       imgN: document.getElementById('img-n'),
       strength: document.getElementById('strength'),
       aspect: document.getElementById('aspect'),
@@ -410,7 +432,7 @@
       openConfig: document.getElementById('openConfig')
     };
 
-    const state = { base64Image: null, blobUrls: new Set() };
+    const state = { images: [], blobUrls: new Set() };
     let selectedCards = new Set();
     let multiSelectMode = false;
 
@@ -496,7 +518,9 @@
         try {
           const currentSize = new Blob([localStorage.getItem(HISTORY_KEY) || '']).size;
           if (currentSize > MAX_STORAGE_SIZE) {
-            localStorage.removeItem(HISTORY_KEY);
+            let items = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+            items = items.slice(0, Math.floor(items.length / 2));
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(items));
           }
 
           const saved = localStorage.getItem(HISTORY_KEY);
@@ -511,7 +535,6 @@
             timestamp: Date.now()
           });
 
-          if (items.length > MAX_HISTORY_ITEMS) items.length = MAX_HISTORY_ITEMS;
           localStorage.setItem(HISTORY_KEY, JSON.stringify(items));
         } catch (e) {
           console.error('保存历史记录失败:', e);
@@ -735,7 +758,7 @@
           video.playsInline = true;
           video.loop = true;
           video.autoplay = true;
-          video.className = 'w-full h-full object-cover';
+          video.className = 'w-full h-auto object-cover block';
 
           const source = document.createElement('source');
           source.src = url;
@@ -904,39 +927,73 @@
         elements.prompt.addEventListener('input', () => this.updateCharCount());
 
         elements.inputImage.addEventListener('change', (e) => {
-          const file = e.target.files[0];
-          if (!file) {
-            this.clearImage();
-            return;
-          }
-          if (!file.type.startsWith('image/')) {
-            Atoms.showError('请选择图片文件');
-            this.clearImage();
-            return;
-          }
-          if (file.size > 10 * 1024 * 1024) {
-            Atoms.showError('图片不能超过10MB');
+          const files = e.target.files;
+          if (files.length === 0) {
             this.clearImage();
             return;
           }
 
-          const reader = new FileReader();
-          reader.onload = (ev) => {
-            elements.preview.src = ev.target.result;
-            elements.previewContainer.style.display = 'block';
-            state.base64Image = ev.target.result;
-            this.updateParams();
-          };
-          reader.onerror = () => {
-            Atoms.showError('读取图片失败');
+          state.images = [];
+          elements.previewGrid.innerHTML = '';
+          elements.previewContainer.style.display = 'none'; // 先隐藏，防止残留
+
+          const isEdit = elements.model.value === 'grok-imagine-1.0-edit';
+          const maxImages = isEdit ? 16 : 1;
+          const processFiles = isEdit ? Array.from(files).slice(0, maxImages) : [files[0]];
+
+          if (processFiles.length === 0) {
             this.clearImage();
-          };
-          reader.readAsDataURL(file);
+            return;
+          }
+
+          // 立即显示容器
+          elements.previewContainer.style.display = 'block';
+
+          processFiles.forEach((file, index) => {
+            if (!file.type.startsWith('image/')) {
+              Atoms.showError('只能上传图片文件');
+              return;
+            }
+            if (file.size > 10 * 1024 * 1024) {
+              Atoms.showError('单张图片不能超过10MB');
+              return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              state.images.push(ev.target.result);
+
+              const item = document.createElement('div');
+              item.className = 'preview-item aspect-square';
+              const img = document.createElement('img');
+              img.src = ev.target.result;
+              img.alt = `参考图${state.images.length}`;
+              img.style.width = '100%';
+              img.style.height = '100%';
+              img.style.objectFit = 'cover';
+              item.appendChild(img);
+              elements.previewGrid.appendChild(item);
+
+              elements.imageCount.textContent = state.images.length;
+              this.updateParams();
+            };
+            reader.onerror = () => {
+              Atoms.showError('读取图片失败');
+            };
+            reader.readAsDataURL(file);
+          });
+
+          if (files.length > maxImages && isEdit) {
+            Atoms.showError(`编辑模式最多支持16张参考图像，已自动截取前16张`);
+          }
         });
 
         elements.clearImage.addEventListener('click', () => this.clearImage());
 
-        elements.model.addEventListener('change', () => this.updateParams());
+        elements.model.addEventListener('change', () => {
+          this.updateParams();
+          this.updateReferenceLabel();
+        });
       },
 
       updateCharCount() {
@@ -944,30 +1001,36 @@
       },
 
       clearImage() {
-        state.base64Image = null;
-        elements.preview.src = '';
+        state.images = [];
+        elements.previewGrid.innerHTML = '';
         elements.previewContainer.style.display = 'none';
         elements.inputImage.value = '';
+        elements.imageCount.textContent = '0';
         this.updateParams();
+      },
+
+      updateReferenceLabel() {
+        const isEdit = elements.model.value === 'grok-imagine-1.0-edit';
+        if (isEdit) {
+          elements.referenceLabel.innerHTML = '<i class="fas fa-image mr-2 text-primary"></i> 参考图像（必填，支持多张，最多16张）';
+        } else {
+          elements.referenceLabel.innerHTML = '<i class="fas fa-image mr-2 text-primary"></i> 参考图像（可选）';
+        }
       },
 
       updateParams() {
         const isVideo = elements.model.value.includes('video');
         const isEdit = elements.model.value === 'grok-imagine-1.0-edit';
-        const hasImage = !!state.base64Image;
+        const hasImage = state.images.length > 0;
 
-        // 生成数量：纯文生图或编辑模式显示
         const showN = !isVideo && (!hasImage || isEdit);
         elements.nParam.classList.toggle('hidden', !showN);
 
-        // 变化强度：图像生成 + 有参考图（变体）
         const showStrength = hasImage && !isEdit && !isVideo;
         elements.strengthParam.classList.toggle('hidden', !showStrength);
 
-        // 视频时长
         elements.lengthParam.classList.toggle('hidden', !isVideo);
 
-        // 宽高比：纯文生图 或 视频 显示（新方式强制支持）
         const showAspect = isVideo || (!hasImage && !isEdit);
         elements.aspectParam.classList.toggle('hidden', !showAspect);
       }
@@ -990,10 +1053,10 @@
         const selectedModel = elements.model.value;
         const isVideo = selectedModel.includes('video');
         const isEdit = selectedModel === 'grok-imagine-1.0-edit';
-        const hasImage = !!state.base64Image;
+        const images = state.images;
 
-        if (isEdit && !hasImage) {
-          Atoms.showError('图像编辑模式必须上传参考图像');
+        if (isEdit && images.length === 0) {
+          Atoms.showError('图像编辑模式必须上传至少一张参考图像');
           return;
         }
 
@@ -1003,11 +1066,11 @@
           let results;
 
           if (isVideo) {
-            results = await this.generateVideo(prompt, hasImage);
+            results = await this.generateVideo(prompt, images.length > 0 ? images[0] : null);
           } else if (isEdit) {
             results = await this.generateImageEdit(prompt);
-          } else if (hasImage) {
-            results = await this.generateImageVariants(prompt);
+          } else if (images.length > 0) {
+            results = await this.generateImageVariants(prompt, images[0]);
           } else {
             results = await this.generateImages(prompt);
           }
@@ -1063,19 +1126,19 @@
         })).filter(item => item.url);
       },
 
-      async generateVideo(prompt, hasImage) {
+      async generateVideo(prompt, base64Image) {
         const requestBody = {
           model: elements.model.value,
           messages: [],
           n: 1
         };
 
-        if (hasImage) {
+        if (base64Image) {
           requestBody.messages.push({
             role: "user",
             content: [
               { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: state.base64Image } }
+              { type: "image_url", image_url: { url: base64Image } }
             ]
           });
         } else {
@@ -1101,14 +1164,14 @@
         }).filter(item => item.url);
       },
 
-      async generateImageVariants(prompt) {
+      async generateImageVariants(prompt, base64Image) {
         const requestBody = {
           model: elements.model.value,
           messages: [{
             role: "user",
             content: [
               { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: state.base64Image } }
+              { type: "image_url", image_url: { url: base64Image } }
             ]
           }],
           n: 1,
@@ -1129,25 +1192,23 @@
       },
 
       async generateImageEdit(prompt) {
-        if (!state.base64Image) {
-          throw new Error('请先上传参考图像');
-        }
-
         const formData = new FormData();
         formData.append('model', 'grok-imagine-1.0-edit');
         formData.append('prompt', prompt);
         formData.append('n', elements.imgN.value || '1');
         formData.append('response_format', 'url');
 
-        const base64Data = state.base64Image.split(',')[1];
-        const byteCharacters = atob(base64Data);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'image/png' });
-        formData.append('image', blob, 'reference.png');
+        state.images.forEach((base64, index) => {
+          const base64Data = base64.split(',')[1];
+          const byteCharacters = atob(base64Data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'image/png' });
+          formData.append('image', blob, `reference_${index}.png`);
+        });
 
         const data = await Atoms.apiPostForm('/images/edits', formData);
 
@@ -1211,6 +1272,7 @@
       InputMolecule.init();
       InputMolecule.updateCharCount();
       InputMolecule.updateParams();
+      InputMolecule.updateReferenceLabel();
 
       elements.generateBtn.addEventListener('click', () => Coordinator.generate());
 
